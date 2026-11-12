@@ -1,0 +1,11 @@
+# Build (.NET)
+app/bin/
+app/obj/
+dist/
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
