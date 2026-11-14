@@ -418,7 +418,7 @@ sealed class SettingsForm : Form
         {
             var item = new ListViewItem(c.Platform.ToString()) { Tag = c, ForeColor = c.Enabled ? list.ForeColor : SystemColors.GrayText };
             item.SubItems.Add(c.Name);
-            item.SubItems.Add((c.Audio ? L("audio") : L("video")) + (c.Transcribe ? " + CC" : ""));
+            item.SubItems.Add((c.Audio ? L("audio") : L("video")) + (c.Transcribe ? " + CC" : "") + (c.Transcribe && c.Chapters && !c.Audio ? " + §" : ""));
             item.SubItems.Add(!c.Enabled ? L("off") : watcher.LastResult.GetValueOrDefault(c.Key, L("not checked yet")));
             list.Items.Add(item);
         }
@@ -500,6 +500,7 @@ sealed class ChannelForm : Form
     readonly RadioButton video = new() { Text = L("Video"), AutoSize = true, Checked = true };
     readonly RadioButton audio = new() { Text = L("Audio only"), AutoSize = true };
     readonly CheckBox transcribe = new() { Text = L("Subtitles with Whisper"), AutoSize = true, Checked = true };
+    readonly CheckBox chapters = new() { Text = L("Topic chapters with Claude (replace Twitch's category chapters)"), AutoSize = true, Checked = true };
     readonly CheckBox enabled = new() { Text = L("Check this channel"), AutoSize = true, Checked = true };
     readonly Label error = new() { AutoSize = true, ForeColor = Ui.Bad };
     public Channel? Result;
@@ -527,6 +528,7 @@ sealed class ChannelForm : Form
         kind.Controls.AddRange([video, audio]);
         Ui.Row(g, L("Download"), kind);
         Ui.Row(g, "", transcribe);
+        Ui.Row(g, "", chapters);
         Ui.Row(g, "", enabled);
         Ui.Full(g, error);
         var ok = new Button { Text = L("Save"), AutoSize = true };
@@ -545,6 +547,9 @@ sealed class ChannelForm : Form
         audio.Checked = c?.Audio ?? false;
         video.Checked = !audio.Checked;
         transcribe.Checked = c?.Transcribe ?? true;
+        chapters.Checked = c?.Chapters ?? true;
+        chapters.Enabled = transcribe.Checked; // i capitoli nascono dalla trascrizione
+        transcribe.CheckedChanged += (_, _) => chapters.Enabled = transcribe.Checked;
         enabled.Checked = c?.Enabled ?? true;
         // incollando un link, la piattaforma si sceglie da sola
         name.TextChanged += (_, _) => { if (ChannelWatcher.PlatformFromInput(name.Text) is Platform p) platform.SelectedIndex = (int)p; };
@@ -560,7 +565,7 @@ sealed class ChannelForm : Form
             Result = new Channel
             {
                 Platform = (Platform)platform.SelectedIndex, Name = n.ToLowerInvariant(), Folder = folder.Text.Trim(),
-                Audio = audio.Checked, Transcribe = transcribe.Checked, Enabled = enabled.Checked,
+                Audio = audio.Checked, Transcribe = transcribe.Checked, Chapters = chapters.Checked, Enabled = enabled.Checked,
             };
             DialogResult = DialogResult.OK;
         };

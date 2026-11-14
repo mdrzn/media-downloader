@@ -91,7 +91,7 @@ sealed class ChannelWatcher
         foreach (var e in fresh)
             queue.Add(new Job
             {
-                Kind = JobKind.Download, Url = e.url, Title = e.title, Audio = c.Audio, Transcribe = c.Transcribe,
+                Kind = JobKind.Download, Url = e.url, Title = e.title, Audio = c.Audio, Transcribe = c.Transcribe, Chapters = c.Transcribe && c.Chapters,
                 ChannelKey = c.Key, ChannelFolder = c.FolderName, VodId = e.id,
             });
         LastResult[c.Key] = fresh.Count > 0 ? L("{0} new", fresh.Count) : L("no new VODs");
@@ -111,7 +111,7 @@ sealed class ChannelWatcher
         if (!queue.IsQueued(c.Key, e[0]))
             queue.Add(new Job
             {
-                Kind = JobKind.Download, Url = e[1], Title = e[2], Audio = c.Audio, Transcribe = c.Transcribe,
+                Kind = JobKind.Download, Url = e[1], Title = e[2], Audio = c.Audio, Transcribe = c.Transcribe, Chapters = c.Transcribe && c.Chapters,
                 ChannelKey = c.Key, ChannelFolder = c.FolderName, VodId = e[0],
             });
         return e[2];

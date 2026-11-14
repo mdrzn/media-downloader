@@ -1,5 +1,5 @@
 // Avvio: una sola istanza per utente; i comandi da riga di comando vanno all'istanza gia' avviata.
-//   MediaDownloader.exe [--download <url> | --audio <url> | --transcribe <file> | --check | --latest <canale> | --pause | --resume | --settings | --quit]
+//   MediaDownloader.exe [--download <url> | --audio <url> | --transcribe <file> | --chapters <file|cartella> | --check | --latest <canale> | --pause | --resume | --settings | --quit]
 //   --lang en|it             forza la lingua
 //   --render-docs <cartella> dati finti: salva menu.png, settings.png e states.png per il README ed esce
 //   --export-icon <file.ico> scrive l'icona dell'app
@@ -25,6 +25,7 @@ static class Program
                 case "--audio": command = "audio\t" + Next(); break;
                 case "--transcribe": command = "transcribe\t" + Path.GetFullPath(Next()); break;
                 case "--check": command = "check"; break;
+                case "--chapters": command = "chapters\t" + Path.GetFullPath(Next()); break;
                 case "--latest": command = "latest\t" + Next(); break;
                 case "--pause": command = "pause"; break;
                 case "--resume": command = "resume"; break;

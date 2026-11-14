@@ -4,7 +4,7 @@ A small Windows tray app that downloads video and audio from YouTube, Twitch, Ki
 
 ![Platform](https://img.shields.io/badge/platform-Windows_10%2F11-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Version](https://img.shields.io/badge/version-1.0.0-orange.svg)
+![Version](https://img.shields.io/badge/version-1.1.0-orange.svg)
 
 <table>
 <tr>
@@ -18,6 +18,7 @@ A small Windows tray app that downloads video and audio from YouTube, Twitch, Ki
 - 📋 **Copy a link, get the file** — copy a YouTube, Twitch, Kick, SoundCloud (and more) link or a direct link to a media file, and a notification offers to download it. Or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd>: video or audio only, with or without subtitles.
 - 📺 **Follow streamers** — add Twitch and Kick channels and their new VODs are downloaded automatically once the stream has ended (never a half-finished recording), video or audio only, per channel.
 - 💬 **Subtitles with Whisper** — `large-v3-turbo` (or `large-v3`) runs locally with [whisper.cpp](https://github.com/ggml-org/whisper.cpp), on the GPU if you have an NVIDIA card: on an RTX 4070 Ti SUPER a 1.5-hour Twitch VOD (1080p60, 4 GB) was downloaded in under a minute and subtitled in about 2 minutes. You get an `.srt` next to the file and a subtitle track inside the video, in the spoken language, detected automatically.
+- 📑 **Chapters by topic** — for VODs, [Claude Code](https://docs.anthropic.com/en/docs/claude-code) reads the transcript and splits the stream every time the topic changes ("FAA grounds every airline", "Jensen-gate continues"…), replacing Twitch's category chapters ("Just Chatting" for five hours). Optional, per channel; it never holds up a download.
 - 🎞️ **Ready for Jellyfin / Plex** — Twitch and Kick go to `<folder>\<streamer>\<date> - <title>.mp4`, subtitles as `<name>.en.srt`; everything else goes to a second folder. Video is always mp4 (plays everywhere, nothing re-encoded). Both folders and the file names are configurable.
 - ⚡ **Fast even on slow disks** — files are downloaded and processed in a working folder on a fast SSD, then moved to their final folder (an external or network drive, say) in a single copy.
 - 🧾 **Queue in the menu** — progress, speed and time left for every job; click one to cancel it. Recent files: click to show them in Explorer. The queue survives a restart.
@@ -50,9 +51,10 @@ powershell -ExecutionPolicy Bypass -File app\build.ps1   # -> dist\MediaDownload
 | Follow a streamer | *Settings → Channels → Add…*, paste `twitch.tv/name` or `kick.com/name` |
 | Grab a channel's latest VOD now | *Channels → <channel> → Download the latest VOD* |
 | Subtitle a file you already have | *Transcribe a file…* |
+| Add topic chapters to VODs you already have | *Add topic chapters to VODs…* (needs the `.srt` next to the video) |
 | Cancel a job | Click it in the menu queue |
 | Stop everything new from starting | *Pause* (running jobs finish) |
-| Script it | `MediaDownloader.exe --download <url>`, `--audio <url>`, `--transcribe <file>`, `--latest <channel>`, `--check`, `--pause`, `--resume`, `--settings`, `--quit` |
+| Script it | `MediaDownloader.exe --download <url>`, `--audio <url>`, `--transcribe <file>`, `--chapters <file or folder>`, `--latest <channel>`, `--check`, `--pause`, `--resume`, `--settings`, `--quit` |
 
 When you add a channel, the VODs it already has are skipped: only new ones are downloaded from then on. Use *Download the latest VOD* to get the most recent one anyway.
 
@@ -70,6 +72,13 @@ Everything is in **Settings**; the file behind it is `%APPDATA%\MediaDownloader\
 | Channels | checked every 30 minutes; automatic downloads wait if less than 20 GB are free |
 | Subtitles | on for video, off for audio; `large-v3-turbo`, language detected automatically, also embedded as a track |
 | Cookies file | optional `cookies.txt` for subscriber-only VODs and age-restricted videos |
+| Topic chapters | on for followed channels with subtitles (and for Twitch/Kick VODs downloaded by hand); `wsl_distro` (empty = default WSL distribution) and `chapters_command` (`claude -p --model sonnet --output-format json`) in `config.json` |
+
+### 📑 Topic chapters
+
+After Whisper, while the file is still in the working folder, the transcript is condensed to one line per minute (`[H:MM:SS] what was said`) and sent to Claude Code on its standard input; Claude answers with the topic changes as JSON. The times are checked (increasing, within the video, first one at 0:00) and ffmpeg writes them into the video **in place of** the existing chapters, without re-encoding and keeping the subtitle track.
+
+It needs [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and logged in inside WSL (`claude -p "hi"` should answer in a WSL terminal). If WSL or Claude isn't available, the answer isn't valid, or it takes more than 5 minutes, the log gets a warning and the video is delivered without new chapters. Jellyfin picks up the new chapters when it rescans the file.
 
 The tools live in `%LOCALAPPDATA%\MediaDownloader\tools` (yt-dlp, ffmpeg, whisper.cpp and the Whisper models); *Settings → Transcription* shows their versions and can update or reinstall them. The log is in `%APPDATA%\MediaDownloader\downloader.log`.
 

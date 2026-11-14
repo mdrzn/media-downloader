@@ -91,6 +91,7 @@ sealed class TrayApp : ApplicationContext
             case "audio": AddDownload(arg, audio: true, Store.Settings.TranscribeAudio); break;
             case "ask": ShowDownload(arg); break;
             case "transcribe": AddTranscription(arg); break;
+            case "chapters": AddChapters(arg); break;
             case "check": _ = watcher.CheckAll(); break;
             case "latest":
                 if (Store.Settings.Channels.FirstOrDefault(c => c.Name.Equals(arg.Trim(), StringComparison.OrdinalIgnoreCase)) is Channel ch) _ = DownloadLatest(ch);
@@ -111,7 +112,8 @@ sealed class TrayApp : ApplicationContext
             Notify(L("Not a link"), url, true);
             return;
         }
-        queue.Add(new Job { Kind = JobKind.Download, Url = u.ToString(), Audio = audio, Transcribe = transcribe });
+        // anche un VOD di Twitch/Kick scaricato a mano riceve i capitoli per argomento, se c'e' la trascrizione
+        queue.Add(new Job { Kind = JobKind.Download, Url = u.ToString(), Audio = audio, Transcribe = transcribe, Chapters = transcribe && !audio && JobQueue.IsStream(u.ToString()) });
     }
 
     public void AddTranscription(string file)
@@ -136,7 +138,8 @@ sealed class TrayApp : ApplicationContext
         {
             lastError = error;
             UpdateState();
-            Notify(job.Kind == JobKind.Download ? L("Download failed") : L("Transcription failed"), $"{job.Display}\n{error}", true, OpenLog);
+            Notify(job.Kind switch { JobKind.Download => L("Download failed"), JobKind.Transcribe => L("Transcription failed"), _ => L("Chapters failed") },
+                   $"{job.Display}\n{error}", true, OpenLog);
             return;
         }
         lastError = null;
@@ -145,8 +148,10 @@ sealed class TrayApp : ApplicationContext
         var file = job.File;
         if (job.Kind == JobKind.Download)
             Notify(L("Downloaded"), job.Transcribe ? L("{0} — subtitles coming next.", job.Display) : job.Display, false, () => ShowFile(file));
-        else
+        else if (job.Kind == JobKind.Transcribe)
             Notify(L("Subtitles ready"), job.Display, false, () => ShowFile(file));
+        else
+            Notify(L("Chapters added"), $"{job.Display} ({job.Progress})", false, () => ShowFile(file));
     }
 
     // ------------------------------------------------------------ stato
@@ -235,6 +240,7 @@ sealed class TrayApp : ApplicationContext
 
         menu.Items.Add(new ToolStripMenuItem(L("Download link…"), null, (_, _) => ShowDownload(null)) { ShortcutKeyDisplayString = Store.Settings.Hotkey });
         menu.Items.Add(new ToolStripMenuItem(L("Transcribe a file…"), null, (_, _) => PickFileToTranscribe()));
+        menu.Items.Add(new ToolStripMenuItem(L("Add topic chapters to VODs…"), null, (_, _) => PickFilesForChapters()));
 
         var active = queue.Active;
         if (active.Count > 0)
@@ -314,7 +320,12 @@ sealed class TrayApp : ApplicationContext
 
     static ToolStripMenuItem Header(string text) => new(text) { Enabled = false };
 
-    static string JobText(Job j) => (j.Kind == JobKind.Download ? (j.Audio ? "♪ " : "↓ ") : "CC ") + Short(j.Display, 46);
+    static string JobText(Job j) => j.Kind switch
+    {
+        JobKind.Download => j.Audio ? "♪ " : "↓ ",
+        JobKind.Transcribe => "CC ",
+        _ => "§ ",
+    } + Short(j.Display, 46);
 
     static string JobProgress(Job j) => j.State == JobState.Queued ? L("queued") : j.Progress;
 
@@ -358,6 +369,30 @@ sealed class TrayApp : ApplicationContext
         downloadForm = new DownloadForm(url, this);
         downloadForm.Show();
         downloadForm.Activate();
+    }
+
+    // Capitoli per video gia' scaricati: un file, o una cartella (tutti i video con i sottotitoli accanto)
+    public void AddChapters(string path)
+    {
+        var files = Directory.Exists(path)
+            ? Directory.EnumerateFiles(path, "*.*", SearchOption.AllDirectories)
+                .Where(f => f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))
+                .Where(f => Chapters.FindSrt(f) != null).ToList()
+            : File.Exists(path) ? [path] : [];
+        if (files.Count == 0) { Notify(L("No videos with subtitles found"), path, true); return; }
+        foreach (var f in files) queue.Add(new Job { Kind = JobKind.Chapters, File = f, Title = Path.GetFileNameWithoutExtension(f) });
+    }
+
+    void PickFilesForChapters()
+    {
+        using var d = new OpenFileDialog
+        {
+            Title = L("Add topic chapters to VODs"),
+            InitialDirectory = Store.Settings.StreamFolder,
+            Filter = L("Video") + "|*.mp4;*.mkv",
+            Multiselect = true,
+        };
+        if (d.ShowDialog() == DialogResult.OK) foreach (var f in d.FileNames) AddChapters(f);
     }
 
     void PickFileToTranscribe()

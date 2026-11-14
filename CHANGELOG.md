@@ -5,6 +5,12 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-11-15
+
+### Added
+- Topic chapters: after Whisper, Claude Code (in WSL, prompt on stdin) turns the transcript into chapters by topic, which replace Twitch's category chapters ("Just Chatting"). Validated (JSON, increasing times within the video, first at 0:00) and written with ffmpeg without re-encoding, keeping the subtitle track. On by default for followed channels with subtitles (per-channel checkbox) and for Twitch/Kick VODs downloaded by hand. Any failure (WSL/Claude missing, 5-minute timeout, invalid answer, ffmpeg error) is logged and the video is delivered anyway.
+- *Add topic chapters to VODs…* in the menu and `--chapters <file|folder>`, for videos already downloaded: remuxed in the working folder, then the original is replaced.
+
 ## [1.0.0] - 2026-11-12
 
 ### Added

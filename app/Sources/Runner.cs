@@ -57,6 +57,41 @@ static class Runner
         finally { lock (running) running.Remove(p); }
     }
 
+    // Con un testo sullo stdin (es. un prompt troppo lungo per la riga di comando); stdout e stderr separati
+    public static async Task<(int code, string stdout, string stderr)> RunWithInput(string exe, IEnumerable<string> args, string input, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo(exe)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardInputEncoding = new UTF8Encoding(false),
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+            WorkingDirectory = Tools.Dir,
+        };
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        using var p = Process.Start(psi) ?? throw new Exception($"Can't start {exe}");
+        lock (running) running.Add(p);
+        try
+        {
+            var stdout = p.StandardOutput.ReadToEndAsync(ct);
+            var stderr = p.StandardError.ReadToEndAsync(ct);
+            await p.StandardInput.WriteAsync(input.AsMemory(), ct);
+            p.StandardInput.Close();
+            try { await p.WaitForExitAsync(ct); }
+            catch (OperationCanceledException)
+            {
+                try { p.Kill(true); } catch { }
+                throw;
+            }
+            return (p.ExitCode, await stdout, await stderr);
+        }
+        finally { lock (running) running.Remove(p); }
+    }
+
     // Comodo per i comandi brevi: exit code + tutte le righe
     public static async Task<(int code, List<string> lines)> Capture(string exe, IEnumerable<string> args, CancellationToken ct = default)
     {

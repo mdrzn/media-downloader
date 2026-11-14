@@ -8,7 +8,7 @@ using System.Text.RegularExpressions;
 
 namespace MediaDownloader;
 
-enum JobKind { Download, Transcribe }
+enum JobKind { Download, Transcribe, Chapters }
 enum JobState { Queued, Running, Done, Failed, Canceled }
 
 sealed class Job
@@ -18,6 +18,7 @@ sealed class Job
     public string Url { get; set; } = "";            // download
     public bool Audio { get; set; }
     public bool Transcribe { get; set; }
+    public bool Chapters { get; set; }               // capitoli per argomento dopo la trascrizione
     public string? ChannelKey { get; set; }          // VOD di un canale seguito
     public string? ChannelFolder { get; set; }
     public string? VodId { get; set; }
@@ -92,7 +93,7 @@ sealed class JobQueue
                 if (jobs.Count(j => j.Kind == JobKind.Download && j.State == JobState.Running) >= Math.Max(1, Store.Settings.ParallelDownloads)) continue;
                 if (job.ChannelKey != null && LowSpace(Folder(job)) is string why) { Waiting = why; continue; }
             }
-            else if (Busy(JobKind.Transcribe)) continue;
+            else if (Busy(job.Kind)) continue; // una trascrizione (GPU) e un lavoro sui capitoli alla volta
             Waiting = null;
             _ = Start(job);
         }
@@ -109,7 +110,8 @@ sealed class JobQueue
         try
         {
             if (job.Kind == JobKind.Download) await RunDownload(job);
-            else await RunTranscription(job);
+            else if (job.Kind == JobKind.Transcribe) await RunTranscription(job);
+            else await RunChapters(job);
             job.State = JobState.Done;
         }
         catch (OperationCanceledException) { job.State = JobState.Canceled; }
@@ -258,7 +260,7 @@ sealed class JobQueue
         {
             // il file resta nella cartella di lavoro: Whisper e la traccia sottotitoli lavorano li', poi si sposta
             job.File = job.Destination;
-            Add(new Job { Kind = JobKind.Transcribe, File = file, Title = job.Title, WorkDir = job.WorkDir, Destination = job.Destination });
+            Add(new Job { Kind = JobKind.Transcribe, File = file, Title = job.Title, WorkDir = job.WorkDir, Destination = job.Destination, Chapters = job.Chapters && !job.Audio });
             job.WorkDir = null; // ora e' della trascrizione: non va cancellata alla fine del download
         }
         else
@@ -322,6 +324,8 @@ sealed class JobQueue
                 Report(job, L("Adding the subtitle track…"), 100);
                 await Embed(job.File, srt, language, ct);
             }
+            // 5. capitoli per argomento, sul file ancora nella cartella di lavoro; se falliscono il video va avanti
+            if (job.Chapters) await TryChapters(job, job.File, srt, ct);
             job.File = await MoveToDestination(job, job.File, ct);
             Store.AddHistory(job.Title != "" ? job.Title : Path.GetFileNameWithoutExtension(job.File), job.File, true);
         }
@@ -341,6 +345,29 @@ sealed class JobQueue
             try { File.Delete(wav); } catch { }
             try { File.Delete(srtBase + ".srt"); } catch { }
         }
+    }
+
+    async Task TryChapters(Job job, string video, string srt, CancellationToken ct)
+    {
+        try
+        {
+            var n = await Chapters.Apply(video, srt, WorkRoot, x => Report(job, x), ct);
+            Log.Info($"Chapters: {n} chapters (claude) — {Path.GetFileName(video)}");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception e) { Log.Warn($"Chapters skipped for {Path.GetFileName(video)}: {e.Message}"); }
+    }
+
+    // Capitoli per un video gia' scaricato (es. su K:): remux nella cartella di lavoro, poi sostituisce l'originale
+    async Task RunChapters(Job job)
+    {
+        var ct = job.Cancel!.Token;
+        if (!File.Exists(job.File)) throw new Exception(L("File not found: {0}", job.File));
+        var srt = Chapters.FindSrt(job.File) ?? throw new Exception(L("No subtitles next to the video: transcribe it first."));
+        await Tools.EnsureBasics(x => Report(job, x), ct);
+        var n = await Chapters.Apply(job.File, srt, WorkRoot, x => Report(job, x), ct);
+        Log.Info($"Chapters: {n} chapters (claude) — {Path.GetFileName(job.File)}");
+        job.Progress = L("{0} chapters", n);
     }
 
     static async Task Embed(string video, string srt, string language, CancellationToken ct)

@@ -15,6 +15,7 @@ sealed class Channel
     public string Folder { get; set; } = "";     // sottocartella in StreamFolder (vuota = Name)
     public bool Audio { get; set; }              // solo audio
     public bool Transcribe { get; set; } = true;
+    public bool Chapters { get; set; } = true;   // capitoli per argomento con Claude (servono i sottotitoli)
     public bool Enabled { get; set; } = true;
     [JsonIgnore] public string Key => $"{Platform}:{Name}".ToLowerInvariant();
     [JsonIgnore] public string FolderName => Folder.Trim() == "" ? Name : Folder.Trim();
@@ -46,6 +47,9 @@ sealed class Settings
     public bool TranscribeAudio { get; set; }
     public bool EmbedSubtitles { get; set; } = true;
     public string WhisperModel { get; set; } = "large-v3-turbo";
+    // Capitoli: Claude Code in WSL, il prompt arriva sullo stdin (WslDistro vuota = la distribuzione predefinita)
+    public string WslDistro { get; set; } = "";
+    public string ChaptersCommand { get; set; } = "claude -p --model sonnet --output-format json";
     public string Language { get; set; } = "auto";
 
     public bool OfferCopiedLinks { get; set; } = true;
